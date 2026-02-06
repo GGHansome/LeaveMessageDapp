@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, useConnect, useDisconnect, useConnection, useConnectors } from 'wagmi'
 import { config } from './wagmi'
-import { MessageBoard } from './components/MessageBoard'
+import { MessageBoard } from './business/MessageBoard'
 import { Button, Layout, theme } from 'antd'
 import './App.css'
 

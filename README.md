@@ -27,6 +27,12 @@
 - 使用 pnpm workspace 将合约和前端项目分离
 - 优化项目目录组织，提高代码可维护性
 
+### 2026年2月6日
+- 前端重构：将 `MessageBoard` 组件拆分为业务逻辑层 (`business/MessageBoard.tsx`) 和 UI 展示层 (`components/MessageBoardUI.tsx`)，实现逻辑与视图分离。
+- 合约部署：通过 Hardhat 进行本地链部署，并将合约部署至本地链上进行测试。
+- 多链支持：前端通过 Wagmi 实现多链连接支持。
+- 配置更新：更新 ABI 文件及 Wagmi 配置。
+
 ## 快速开始
 
 ### 安装依赖

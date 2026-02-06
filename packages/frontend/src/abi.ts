@@ -1,3 +1,5 @@
+import { sepolia, hardhat } from 'wagmi/chains';
+
 export const messageBoardAbi = [
   {
     "inputs": [],
@@ -105,4 +107,7 @@ export const messageBoardAbi = [
   }
 ] as const;
 
-export const messageBoardAddress = "0x46B889915d5627C39016adf78c1638eC7AE639c6" as const;
+export const messageBoardAddresses = {
+    [sepolia.id]: "0x46B889915d5627C39016adf78c1638eC7AE639c6",
+    [hardhat.id]: "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+} as const;

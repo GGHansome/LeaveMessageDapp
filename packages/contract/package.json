@@ -2,6 +2,11 @@
   "name": "contract",
   "version": "1.0.0",
   "type": "module",
+  "scripts": {
+    "node": "pnpm hardhat node",
+    "deploy:messageLeave": "pnpm hardhat ignition deploy ignition/modules/messageLeave.ts --network localhost",
+    "deploy": "node scripts/deploy.js"
+  },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.7",
     "@nomicfoundation/hardhat-toolbox-viem": "^5.0.2",

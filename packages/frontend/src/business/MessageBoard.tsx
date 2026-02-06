@@ -1,21 +1,17 @@
 import { useState } from 'react';
-import { useConnection, useWriteContract, usePublicClient } from 'wagmi';
-import { Card, Input, Button, List, Typography, message as antMessage, Space, Divider } from 'antd';
-import { messageBoardAbi, messageBoardAddress } from '../abi';
-
-const { TextArea } = Input;
-const { Title, Text } = Typography;
-
-interface MessageItem {
-  index: number;
-  sender: string;
-  content: string;
-}
+import { useConnection, useWriteContract, usePublicClient, useChainId } from 'wagmi';
+import { message as antMessage } from 'antd';
+import { messageBoardAbi, messageBoardAddresses } from '../abi';
+import { MessageBoardUI, type MessageItem } from '../components/MessageBoardUI';
 
 export function MessageBoard() {
   const { address, isConnected } = useConnection();
   const { mutateAsync: writeContractAsync, isPending: isWriting } = useWriteContract();
   const publicClient = usePublicClient();
+  const chainId = useChainId();
+  
+  // 获取当前链的合约地址，如果没有则默认使用 Sepolia 地址或者 undefined
+  const messageBoardAddress = messageBoardAddresses[chainId as keyof typeof messageBoardAddresses] || messageBoardAddresses[11155111]; 
 
   const [messageInput, setMessageInput] = useState('');
   const [queryAddress, setQueryAddress] = useState('');
@@ -31,6 +27,11 @@ export function MessageBoard() {
     if (!isConnected) {
       antMessage.warning('请先连接钱包');
       return;
+    }
+
+    if (!messageBoardAddress) {
+        antMessage.error('当前网络不支持该合约');
+        return;
     }
 
     try {
@@ -137,8 +138,6 @@ export function MessageBoard() {
         content: msg as string,
       }));
 
-      console.log(results);
-
       setMessages(loadedMessages);
       antMessage.success(`查询成功，共找到 ${messageCount} 条留言`);
 
@@ -160,58 +159,17 @@ export function MessageBoard() {
   };
 
   return (
-    <div style={{ maxWidth: 800, margin: '0 auto', padding: 20 }}>
-      <Title level={2}>DApp 留言板</Title>
-      
-      <Card title="发送留言" style={{ marginBottom: 20 }}>
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          <TextArea 
-            rows={4} 
-            value={messageInput} 
-            onChange={(e) => setMessageInput(e.target.value)} 
-            placeholder="输入你的留言..." 
-          />
-          <Button type="primary" onClick={handleLeaveMessage} loading={isWriting}>
-            发送留言
-          </Button>
-        </Space>
-      </Card>
-
-      <Card title="查询留言">
-        <Space orientation="vertical" style={{ width: '100%' }}>
-          <Space>
-            <Input 
-              placeholder="输入钱包地址 0x..." 
-              value={queryAddress} 
-              onChange={(e) => setQueryAddress(e.target.value)}
-              style={{ width: 300 }}
-            />
-            <Button onClick={() => fetchMessages(queryAddress)} loading={loading}>
-              查询留言
-            </Button>
-            <Button onClick={handleQueryMyMessages} loading={loading}>
-              查询我的留言
-            </Button>
-          </Space>
-
-          <Divider />
-
-          <List
-            itemLayout="horizontal"
-            dataSource={messages}
-            loading={loading}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={<Text strong>第 {item.index + 1} 条留言 (来自: {item.sender})</Text>}
-                  description={item.content}
-                />
-              </List.Item>
-            )}
-            locale={{ emptyText: '暂无数据' }}
-          />
-        </Space>
-      </Card>
-    </div>
+    <MessageBoardUI
+      messageInput={messageInput}
+      onMessageInputChange={setMessageInput}
+      onLeaveMessage={handleLeaveMessage}
+      isWriting={isWriting}
+      queryAddress={queryAddress}
+      onQueryAddressChange={setQueryAddress}
+      onQueryMessages={() => fetchMessages(queryAddress)}
+      onQueryMyMessages={handleQueryMyMessages}
+      loading={loading}
+      messages={messages}
+    />
   );
 }
