@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "node": "pnpm hardhat node",
-    "deploy:messageLeave": "pnpm hardhat ignition deploy ignition/modules/messageLeave.ts --network localhost",
-    "deploy": "node scripts/deploy.js"
+    "compile": "pnpm hardhat compile",
+    "deploy:messageLeave": "pnpm compile && npm hardhat ignition deploy ignition/modules/messageLeave.ts --network localhost",
+    "deploy": "pnpm compile && node scripts/deploy.js"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.7",
@@ -15,5 +16,8 @@
     "hardhat": "^3.1.6",
     "typescript": "~5.8.3",
     "viem": "^2.45.1"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.4.0"
   }
 }

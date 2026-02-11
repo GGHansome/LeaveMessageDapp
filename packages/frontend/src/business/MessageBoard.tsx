@@ -1,8 +1,16 @@
-import { useState } from 'react';
-import { useConnection, useWriteContract, usePublicClient, useChainId } from 'wagmi';
+import { useState, useEffect } from 'react';
+import { useConnection, useWriteContract, usePublicClient, useChainId, useReadContract } from 'wagmi';
 import { message as antMessage } from 'antd';
+import { formatEther, parseEther } from 'viem';
 import { messageBoardAbi, messageBoardAddresses } from '../abi';
 import { MessageBoardUI, type MessageItem } from '../components/MessageBoardUI';
+
+// Define the structure returned by the contract
+interface ContractMessage {
+  sender: string;
+  content: string;
+  timestamp: bigint;
+}
 
 export function MessageBoard() {
   const { address, isConnected } = useConnection();
@@ -17,6 +25,48 @@ export function MessageBoard() {
   const [queryAddress, setQueryAddress] = useState('');
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'ALL' | 'FILTERED'>('ALL'); // 新增状态
+  
+  // New state
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [isTipping, setIsTipping] = useState(false);
+
+  // Fetch Balance using useReadContract
+  const { data: balanceData, refetch: refetchBalance } = useReadContract({
+    address: messageBoardAddress,
+    abi: messageBoardAbi,
+    functionName: 'balances',
+    args: address ? [address] : undefined,
+    query: {
+        enabled: !!address && !!messageBoardAddress,
+    }
+  });
+
+  const { data: allMessagesData, refetch: refetchAllMessages } = useReadContract({
+    address: messageBoardAddress,
+    abi: messageBoardAbi,
+    functionName: 'getAllMessages',
+    query: {
+      enabled: !!messageBoardAddress,
+    }
+  });
+
+  useEffect(() => {
+    if (allMessagesData) {
+      const formattedMessages: MessageItem[] = (allMessagesData as unknown as ContractMessage[]).map((msg, index) => ({
+        index: index,
+        sender: msg.sender,
+        content: msg.content,
+      }));
+      
+      // 如果处于 "ALL" 模式，使用 formattedMessages 更新 UI
+      if (viewMode === 'ALL') {
+        setMessages(formattedMessages);
+      }
+    }
+  }, [allMessagesData, viewMode]); // 依赖 viewMode 而不是 queryAddress
+
+  const balance = balanceData ? formatEther(balanceData) : '0';
 
   // Leave a message
   const handleLeaveMessage = async () => {
@@ -42,6 +92,7 @@ export function MessageBoard() {
         args: [messageInput],
       });
       antMessage.success('留言发送成功！等待交易确认...');
+      setTimeout(() => refetchAllMessages(), 5000);
       setMessageInput('');
     } catch (error) {
       console.error(error);
@@ -64,82 +115,35 @@ export function MessageBoard() {
 
     setLoading(true);
     setMessages([]);
+    // 设置为 FILTERED 模式
+    setViewMode('FILTERED');
 
     try {
         if (!publicClient) throw new Error("Public client not initialized");
 
-      // 1. Get message count
-      const count = await publicClient.readContract({
+      // 1. Fetch messages using the new optimized function
+      const messagesData = await publicClient.readContract({
         address: messageBoardAddress,
         abi: messageBoardAbi,
-        functionName: 'getMessageCount',
+        functionName: 'getMessagesByUser',
         args: [targetAddr as `0x${string}`],
-      });
+      }) as ContractMessage[]; // Type assertion here
 
-      const messageCount = Number(count);
-      
-      if (messageCount === 0) {
+      // messagesData is an array of structs: [{sender, content, timestamp}, ...]
+      // We map it to the UI format
+      const loadedMessages: MessageItem[] = messagesData.map((msg, index) => ({
+        index: index,
+        sender: msg.sender,
+        content: msg.content,
+      }));
+
+      if (loadedMessages.length === 0) {
         antMessage.info('该地址没有留言');
-        setLoading(false);
-        return;
+        setMessages([]);
+      } else {
+        setMessages(loadedMessages);
+        antMessage.success(`查询成功，共找到 ${loadedMessages.length} 条留言`);
       }
-
-
-      // 2. Fetch all messages
-      
-      /* 
-      // 备选方案：使用 multicall 以获得更好的性能
-      // 为所有索引准备合约调用
-      const calls = [];
-      for (let i = 0; i < messageCount; i++) {
-        calls.push({
-            address: messageBoardAddress,
-            abi: messageBoardAbi,
-            functionName: 'getMessage',
-            args: [targetAddr as `0x${string}`, BigInt(i)]
-        } as const);
-      }
-
-      // 执行 multicall
-      const multicallResults = await publicClient.multicall({
-        contracts: calls
-      });
-
-      // 映射结果
-      const loadedMessagesMulticall: MessageItem[] = multicallResults.map((result, index) => ({
-        index: index,
-        sender: targetAddr,
-        content: result.status === 'success' ? result.result as string : '获取留言失败'
-      }));
-      // setMessages(loadedMessagesMulticall);
-      // return;
-      */
-
-      // 如果可能执行 multicall，或者并行请求
-      // wagmi publicClient.multicall 很棒，但为了简单起见，我们坚持使用 readContract，或者如果是简单的请求则使用并行 promises
-      // 实际上，如果支持的话，publicClient.multicall 的性能更好，但为了安全起见，我们在没有显式 multicall 配置的标准 RPC 下使用并行 readContract，
-      // 尽管 viem 处理得很好。
-      // 在这个例子中，除非我们想显式使用 multicall，否则为了简单和清晰，我们使用 Promise.all 进行单独读取。
-      
-      const results = await Promise.all(
-        Array.from({ length: messageCount }, (_, i) => 
-            publicClient.readContract({
-                address: messageBoardAddress,
-                abi: messageBoardAbi,
-                functionName: 'getMessage',
-                args: [targetAddr as `0x${string}`, BigInt(i)]
-            })
-        )
-      );
-
-      const loadedMessages: MessageItem[] = results.map((msg, index) => ({
-        index: index,
-        sender: targetAddr,
-        content: msg as string,
-      }));
-
-      setMessages(loadedMessages);
-      antMessage.success(`查询成功，共找到 ${messageCount} 条留言`);
 
     } catch (error) {
       console.error(error);
@@ -147,6 +151,13 @@ export function MessageBoard() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleShowAll = () => {
+    setViewMode('ALL');
+    setQueryAddress('');
+    refetchAllMessages();
+    // 触发 effect 更新
   };
 
   const handleQueryMyMessages = () => {
@@ -158,6 +169,66 @@ export function MessageBoard() {
     }
   };
 
+  const handleTipUser = async (target: string, amount: string) => {
+    if (!isConnected) {
+       antMessage.warning('请先连接钱包');
+       return;
+   }
+   if (!messageBoardAddress) {
+       antMessage.error('Contract not found');
+       return;
+   }
+   setIsTipping(true);
+   try {
+       await writeContractAsync({
+           address: messageBoardAddress,
+           abi: messageBoardAbi,
+           functionName: 'tipUser',
+           args: [target as `0x${string}`],
+           value: parseEther(amount),
+       });
+       antMessage.success('打赏成功！等待确认...');
+       // 为了保险起见，这里本来可以刷新余额，但实际上，打赏通常只是减少发送者自己钱包的原生ETH余额，
+       // 并不会影响其在合约中的余额（除非合约机制有特殊设计）。
+       // 注意，balances[target] += msg.value 表示收款人的合约余额增加，
+       // 而打赏人（sender）的合约余额并不会变化，打赏的钱是直接从钱包发送，不经过sender在合约的余额。
+       // 所以，这里其实不需要刷新打赏人（发送人）的合约余额，只是有时候为了显示最新状态刷一下也没坏处。
+       // 如果将来支持“从合约余额里给别人打赏”（目前未实现），那就需要刷新余额了。
+   } catch (error) {
+       console.error(error);
+       antMessage.error('打赏失败');
+   } finally {
+       setIsTipping(false);
+   }
+ };
+
+ const handleWithdraw = async () => {
+    if (!isConnected) {
+       antMessage.warning('请先连接钱包');
+       return;
+   }
+    if (!messageBoardAddress) {
+       antMessage.error('Contract not found');
+       return;
+   }
+   setIsWithdrawing(true);
+   try {
+        await writeContractAsync({
+           address: messageBoardAddress,
+           abi: messageBoardAbi,
+           functionName: 'withdraw',
+       });
+       antMessage.success('提现申请已提交！');
+       // Refresh balance after a delay
+       setTimeout(() => refetchBalance(), 5000);
+   } catch (error) {
+       console.error(error);
+       antMessage.error('提现失败');
+   } finally {
+       setIsWithdrawing(false);
+   }
+ };
+
   return (
     <MessageBoardUI
       messageInput={messageInput}
@@ -168,8 +239,14 @@ export function MessageBoard() {
       onQueryAddressChange={setQueryAddress}
       onQueryMessages={() => fetchMessages(queryAddress)}
       onQueryMyMessages={handleQueryMyMessages}
+      onShowAll={handleShowAll}
       loading={loading}
       messages={messages}
+      balance={balance}
+      onWithdraw={handleWithdraw}
+      isWithdrawing={isWithdrawing}
+      onTip={handleTipUser}
+      isTipping={isTipping}
     />
   );
 }

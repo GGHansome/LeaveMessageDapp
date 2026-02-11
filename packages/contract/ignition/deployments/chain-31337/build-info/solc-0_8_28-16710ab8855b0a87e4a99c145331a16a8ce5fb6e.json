@@ -1,0 +1,47 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-16710ab8855b0a87e4a99c145331a16a8ce5fb6e",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "userSourceNameMap": {
+    "contracts/messageLeave.sol": "project/contracts/messageLeave.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": [
+        "project/:@openzeppelin/contracts/=npm/@openzeppelin/contracts@5.4.0/"
+      ]
+    },
+    "sources": {
+      "npm/@openzeppelin/contracts@5.4.0/utils/ReentrancyGuard.sol": {
+        "content": "// SPDX-License-Identifier: MIT\n// OpenZeppelin Contracts (last updated v5.1.0) (utils/ReentrancyGuard.sol)\n\npragma solidity ^0.8.20;\n\n/**\n * @dev Contract module that helps prevent reentrant calls to a function.\n *\n * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier\n * available, which can be applied to functions to make sure there are no nested\n * (reentrant) calls to them.\n *\n * Note that because there is a single `nonReentrant` guard, functions marked as\n * `nonReentrant` may not call one another. This can be worked around by making\n * those functions `private`, and then adding `external` `nonReentrant` entry\n * points to them.\n *\n * TIP: If EIP-1153 (transient storage) is available on the chain you're deploying at,\n * consider using {ReentrancyGuardTransient} instead.\n *\n * TIP: If you would like to learn more about reentrancy and alternative ways\n * to protect against it, check out our blog post\n * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].\n */\nabstract contract ReentrancyGuard {\n    // Booleans are more expensive than uint256 or any type that takes up a full\n    // word because each write operation emits an extra SLOAD to first read the\n    // slot's contents, replace the bits taken up by the boolean, and then write\n    // back. This is the compiler's defense against contract upgrades and\n    // pointer aliasing, and it cannot be disabled.\n\n    // The values being non-zero value makes deployment a bit more expensive,\n    // but in exchange the refund on every call to nonReentrant will be lower in\n    // amount. Since refunds are capped to a percentage of the total\n    // transaction's gas, it is best to keep them low in cases like this one, to\n    // increase the likelihood of the full refund coming into effect.\n    uint256 private constant NOT_ENTERED = 1;\n    uint256 private constant ENTERED = 2;\n\n    uint256 private _status;\n\n    /**\n     * @dev Unauthorized reentrant call.\n     */\n    error ReentrancyGuardReentrantCall();\n\n    constructor() {\n        _status = NOT_ENTERED;\n    }\n\n    /**\n     * @dev Prevents a contract from calling itself, directly or indirectly.\n     * Calling a `nonReentrant` function from another `nonReentrant`\n     * function is not supported. It is possible to prevent this from happening\n     * by making the `nonReentrant` function external, and making it call a\n     * `private` function that does the actual work.\n     */\n    modifier nonReentrant() {\n        _nonReentrantBefore();\n        _;\n        _nonReentrantAfter();\n    }\n\n    function _nonReentrantBefore() private {\n        // On the first call to nonReentrant, _status will be NOT_ENTERED\n        if (_status == ENTERED) {\n            revert ReentrancyGuardReentrantCall();\n        }\n\n        // Any calls to nonReentrant after this point will fail\n        _status = ENTERED;\n    }\n\n    function _nonReentrantAfter() private {\n        // By storing the original value once again, a refund is triggered (see\n        // https://eips.ethereum.org/EIPS/eip-2200)\n        _status = NOT_ENTERED;\n    }\n\n    /**\n     * @dev Returns true if the reentrancy guard is currently set to \"entered\", which indicates there is a\n     * `nonReentrant` function in the call stack.\n     */\n    function _reentrancyGuardEntered() internal view returns (bool) {\n        return _status == ENTERED;\n    }\n}\n"
+      },
+      "project/contracts/messageLeave.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\nimport \"@openzeppelin/contracts/utils/ReentrancyGuard.sol\";\nimport \"../interfaces/IMessageBoard.sol\";\n\n// 继承 IMessageBoard 接口\ncontract MessageBoard is ReentrancyGuard, IMessageBoard {\n    // 唯一的留言存储：保存所有留言的全局数组\n    Message[] public allMessages;\n\n    // 账本，记录每个用户账户里有多少可提现的余额\n    mapping(address => uint256) public balances;\n\n    constructor() {\n        string memory initMsg = \"Hello ETH Pandas\";\n        // 只需要推送到 allMessages\n        allMessages.push(Message(msg.sender, initMsg, block.timestamp));\n        emit NewMessage(msg.sender, initMsg);\n    }\n\n    // 发送一条留言\n    function leaveMessage(string memory _msg) public override {\n        // 只需要推送到 allMessages，省去了一次 Mapping 写入的 Gas\n        allMessages.push(Message(msg.sender, _msg, block.timestamp));\n        emit NewMessage(msg.sender, _msg);\n    }\n\n    // 打赏功能\n    function tipUser(address _target) public payable override {\n      require(msg.value > 0, \"Tip amount must be greater than 0\");\n      require(_target != address(0), \"Cannot tip address 0\");\n      balances[_target] += msg.value;\n      emit TipSent(msg.sender, _target, msg.value);\n    }\n\n    // 提现功能\n    function withdraw() public nonReentrant override {\n      uint256 amount = balances[msg.sender];\n      require(amount > 0, \"No balance to withdraw\");\n      balances[msg.sender] = 0;\n      emit Withdraw(msg.sender, amount);\n      (bool success, ) = msg.sender.call{value: amount}(\"\");\n      require(success, \"Transfer failed\");\n    }\n\n    // 获取所有留言\n    function getAllMessages() public view override returns (Message[] memory) {\n        return allMessages;\n    }\n\n    // 新增：根据地址获取留言 (替代原来的 Mapping 查询)\n    function getMessagesByUser(address user) public view override returns (Message[] memory) {\n        uint256 count = 0;\n        // 第一遍循环：计算数量\n        for(uint i = 0; i < allMessages.length; i++) {\n            if(allMessages[i].sender == user) {\n                count++;\n            }\n        }\n        \n        // 第二遍循环：填充数组\n        Message[] memory userMsgs = new Message[](count);\n        uint256 j = 0;\n        for(uint i = 0; i < allMessages.length; i++) {\n            if(allMessages[i].sender == user) {\n                userMsgs[j] = allMessages[i];\n                j++;\n            }\n        }\n        return userMsgs;\n    }\n}\n"
+      },
+      "project/interfaces/IMessageBoard.sol": {
+        "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ninterface IMessageBoard {\n    // 结构体定义在接口中，方便外部引用\n    struct Message {\n        address sender;\n        string content;\n        uint256 timestamp;\n    }\n\n    // 事件\n    event NewMessage(address indexed sender, string message);\n    event TipSent(address indexed from, address indexed to, uint256 amount);\n    event Withdraw(address indexed sender, uint256 amount);\n\n    // 函数接口\n    function leaveMessage(string memory _msg) external;\n    function tipUser(address _target) external payable;\n    function withdraw() external;\n    function getAllMessages() external view returns (Message[] memory);\n    function getMessagesByUser(address user) external view returns (Message[] memory);\n}\n"
+      }
+    }
+  }
+}
