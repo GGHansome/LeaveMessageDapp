@@ -28,20 +28,20 @@ contract MessageBoard is ReentrancyGuard, IMessageBoard {
 
     // 打赏功能
     function tipUser(address _target) public payable override {
-      require(msg.value > 0, "Tip amount must be greater than 0");
-      require(_target != address(0), "Cannot tip address 0");
-      balances[_target] += msg.value;
-      emit TipSent(msg.sender, _target, msg.value);
+        require(msg.value > 0, "Tip amount must be greater than 0");
+        require(_target != address(0), "Cannot tip address 0");
+        balances[_target] += msg.value;
+        emit TipSent(msg.sender, _target, msg.value);
     }
 
     // 提现功能
-    function withdraw() public nonReentrant override {
-      uint256 amount = balances[msg.sender];
-      require(amount > 0, "No balance to withdraw");
-      balances[msg.sender] = 0;
-      emit Withdraw(msg.sender, amount);
-      (bool success, ) = msg.sender.call{value: amount}("");
-      require(success, "Transfer failed");
+    function withdraw() public override nonReentrant {
+        uint256 amount = balances[msg.sender];
+        require(amount > 0, "No balance to withdraw");
+        balances[msg.sender] = 0;
+        emit Withdraw(msg.sender, amount);
+        (bool success, ) = msg.sender.call{value: amount}("");
+        require(success, "Transfer failed");
     }
 
     // 获取所有留言
@@ -50,20 +50,22 @@ contract MessageBoard is ReentrancyGuard, IMessageBoard {
     }
 
     // 新增：根据地址获取留言 (替代原来的 Mapping 查询)
-    function getMessagesByUser(address user) public view override returns (Message[] memory) {
+    function getMessagesByUser(
+        address user
+    ) public view returns (Message[] memory) {
         uint256 count = 0;
         // 第一遍循环：计算数量
-        for(uint i = 0; i < allMessages.length; i++) {
-            if(allMessages[i].sender == user) {
+        for (uint i = 0; i < allMessages.length; i++) {
+            if (allMessages[i].sender == user) {
                 count++;
             }
         }
-        
+
         // 第二遍循环：填充数组
         Message[] memory userMsgs = new Message[](count);
         uint256 j = 0;
-        for(uint i = 0; i < allMessages.length; i++) {
-            if(allMessages[i].sender == user) {
+        for (uint i = 0; i < allMessages.length; i++) {
+            if (allMessages[i].sender == user) {
                 userMsgs[j] = allMessages[i];
                 j++;
             }

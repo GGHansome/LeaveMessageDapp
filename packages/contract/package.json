@@ -5,8 +5,9 @@
   "scripts": {
     "node": "pnpm hardhat node",
     "compile": "pnpm hardhat compile",
-    "deploy:messageLeave": "pnpm compile && npm hardhat ignition deploy ignition/modules/messageLeave.ts --network localhost",
-    "deploy": "pnpm compile && node scripts/deploy.js"
+    "deploy:MessageBoard": "pnpm compile && npm hardhat ignition deploy ignition/modules/MessageBoard.ts --network localhost",
+    "deploy": "pnpm compile && node scripts/deploy.js",
+    "test": "pnpm hardhat test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-ignition": "^3.0.7",
