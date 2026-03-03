@@ -14,10 +14,18 @@ interface IMessageBoard {
     event TipSent(address indexed from, address indexed to, uint256 amount);
     event Withdraw(address indexed sender, uint256 amount);
 
+    // ERC20 打赏事件
+    event TipERC20Sent(address indexed from, address indexed to, address indexed token, uint256 amount);
+    event WithdrawERC20(address indexed sender, address indexed token, uint256 amount);
+
     // 函数接口
     function leaveMessage(string memory _msg) external;
     function tipUser(address _target) external payable;
     function withdraw() external;
+
+    // ERC20 打赏接口
+    function tipUserERC20(address _target, address _token, uint256 _amount) external;
+    function withdrawERC20(address _token) external;
     function getAllMessages() external view returns (Message[] memory);
     function getMessagesByUser(address user) external view returns (Message[] memory);
 }

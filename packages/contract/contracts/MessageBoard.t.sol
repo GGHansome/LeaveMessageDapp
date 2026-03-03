@@ -4,10 +4,12 @@ pragma solidity ^0.8.28;
 import {Test} from "forge-std/Test.sol";
 
 import {MessageBoard} from "./MessageBoard.sol";
+import {MyToken} from "./MyToken.sol";
 import {IMessageBoard} from "../interfaces/IMessageBoard.sol";
 
 contract MessageBoardTest is Test {
     MessageBoard board;
+    MyToken token;
 
     address alice = makeAddr("alice");
     address bob = makeAddr("bob");
@@ -16,9 +18,12 @@ contract MessageBoardTest is Test {
     event NewMessage(address indexed sender, string message);
     event TipSent(address indexed from, address indexed to, uint256 amount);
     event Withdraw(address indexed sender, uint256 amount);
+    event TipERC20Sent(address indexed from, address indexed to, address indexed token, uint256 amount);
+    event WithdrawERC20(address indexed sender, address indexed token, uint256 amount);
 
     function setUp() public {
         board = new MessageBoard();
+        token = new MyToken(1000000 * 10**18);
     }
 
     function test_InitialMessage() public view {
@@ -167,5 +172,43 @@ contract MessageBoardTest is Test {
         vm.expectRevert(bytes("No balance to withdraw"));
         vm.prank(alice);
         board.withdraw();
+    }
+
+    function test_TipUserERC20_RecordsBalanceAndEmits() public {
+        uint256 tipAmount = 100 * 10**18;
+        token.transfer(tipper, tipAmount);
+
+        vm.startPrank(tipper);
+        token.approve(address(board), tipAmount);
+
+        vm.expectEmit(true, true, true, true, address(board));
+        emit TipERC20Sent(tipper, alice, address(token), tipAmount);
+
+        board.tipUserERC20(alice, address(token), tipAmount);
+        vm.stopPrank();
+
+        require(board.erc20Balances(address(token), alice) == tipAmount, "ERC20 balance should equal tip");
+        require(token.balanceOf(address(board)) == tipAmount, "Board should hold tokens");
+    }
+
+    function test_WithdrawERC20_TransfersAndZerosBalanceAndEmits() public {
+        uint256 tipAmount = 100 * 10**18;
+        token.transfer(tipper, tipAmount);
+
+        vm.startPrank(tipper);
+        token.approve(address(board), tipAmount);
+        board.tipUserERC20(alice, address(token), tipAmount);
+        vm.stopPrank();
+
+        uint256 aliceBefore = token.balanceOf(alice);
+
+        vm.expectEmit(true, true, false, true, address(board));
+        emit WithdrawERC20(alice, address(token), tipAmount);
+
+        vm.prank(alice);
+        board.withdrawERC20(address(token));
+
+        require(board.erc20Balances(address(token), alice) == 0, "ERC20 balance should be zeroed");
+        require(token.balanceOf(alice) == aliceBefore + tipAmount, "Alice should receive tokens");
     }
 }

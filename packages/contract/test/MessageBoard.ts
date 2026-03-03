@@ -16,6 +16,7 @@ describe("MessageBoard Integration Flow", async function () {
     // --- 1. 部署合约 ---
     console.log("Step 1: Deploying contract...");
     const messageBoard = await viem.deployContract("MessageBoard");
+    const myToken = await viem.deployContract("MyToken", [parseEther("1000000")]);
     
     // 验证初始状态
     const initialMessages = await messageBoard.read.getAllMessages();
@@ -92,5 +93,48 @@ describe("MessageBoard Integration Flow", async function () {
     assert.equal(finalContractBalance, 0n);
 
     console.log("Withdrawal successful! Flow complete.");
+
+    // --- 6. Bob 给 Alice 打赏 ERC20 ---
+    console.log("Step 6: Bob tips Alice with ERC20...");
+    const tipErc20Amount = parseEther("100");
+    
+    // Deployer transfers some tokens to Bob
+    await myToken.write.transfer([bobAddress, parseEther("1000")]);
+    
+    const myTokenAsBob = await viem.getContractAt(
+      "MyToken",
+      myToken.address,
+      { client: { wallet: bobWallet } }
+    );
+
+    // Bob approves MessageBoard to spend his tokens
+    await myTokenAsBob.write.approve([messageBoard.address, tipErc20Amount]);
+
+    // Bob tips Alice
+    await messageBoardAsBob.write.tipUserERC20([aliceAddress, myToken.address, tipErc20Amount]);
+
+    // Verify contract recorded the ERC20 balance
+    const aliceErc20ContractBalance = await messageBoard.read.erc20Balances([myToken.address, aliceAddress]);
+    assert.equal(aliceErc20ContractBalance, tipErc20Amount);
+    console.log(`Alice's ERC20 balance in contract is now ${aliceErc20ContractBalance} wei.`);
+
+    // --- 7. Alice 提现 ERC20 ---
+    console.log("Step 7: Alice withdraws ERC20 funds...");
+    
+    const aliceErc20WalletBalanceBefore = await myToken.read.balanceOf([aliceAddress]);
+
+    // Alice executes ERC20 withdrawal
+    await messageBoardAsAlice.write.withdrawERC20([myToken.address]);
+
+    const aliceErc20WalletBalanceAfter = await myToken.read.balanceOf([aliceAddress]);
+
+    // Verify wallet balance increased
+    assert.equal(aliceErc20WalletBalanceAfter, aliceErc20WalletBalanceBefore + tipErc20Amount);
+
+    // Verify contract balance zeroed
+    const finalErc20ContractBalance = await messageBoard.read.erc20Balances([myToken.address, aliceAddress]);
+    assert.equal(finalErc20ContractBalance, 0n);
+
+    console.log("ERC20 Withdrawal successful! Flow complete.");
   });
 });
